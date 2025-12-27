@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, LargeBinary
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, LargeBinary, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
 from datetime import datetime
@@ -26,6 +26,9 @@ class Student(Base):
 
 class Attendance(Base):
     __tablename__ = "attendances"
+    __table_args__ = (
+        UniqueConstraint('student_id', 'date', name='_student_date_uc'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("students.id"))

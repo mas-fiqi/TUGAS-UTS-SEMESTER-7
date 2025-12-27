@@ -17,18 +17,24 @@ def get_db():
     finally:
         db.close()
 
-@router.post("/", response_model=schemas.Attendance)
+@router.post("/", response_model=schemas.AttendanceResponse)
 async def submit_attendance(
     nim: str = Form(...),
+    class_id: int = Form(...), # Ditambahkan sesuai request: Identitas Kelas
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    # 1. Find Student
+    # 1. Cari Data Siswa (Identitas Siswa)
     student = db.query(models.Student).filter(models.Student.nim == nim).first()
     if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
+        # Mengembalikan respon GAGAL yang rapi
+        return {"status": "gagal", "message": "Siswa tidak ditemukan", "data": None}
 
-    # 2. Check for duplicate attendance today
+    # 2. Validasi Kelas (Memastikan siswa mengirim identitas kelas yang benar)
+    if student.class_id != class_id:
+        return {"status": "gagal", "message": "Siswa tidak terdaftar di kelas ini", "data": None}
+
+    # 3. Cek Absen Ganda (Anti-Double)
     today = datetime.now().strftime("%Y-%m-%d")
     existing_attendance = db.query(models.Attendance).filter(
         models.Attendance.student_id == student.id,
@@ -36,19 +42,18 @@ async def submit_attendance(
     ).first()
 
     if existing_attendance:
-        raise HTTPException(status_code=400, detail="Student already attended today")
+        return {"status": "gagal", "message": "Siswa sudah melakukan absensi hari ini", "data": None}
 
-    # 3. Validate Face (AI)
+    # 4. Validasi Wajah dengan AI
     content = await file.read()
     if student.face_encoding:
         is_match = validate_face(content, student.face_encoding)
         if not is_match:
-             raise HTTPException(status_code=400, detail="Face mismatch! Attendance rejected.")
+             return {"status": "gagal", "message": "Wajah tidak cocok! Absensi ditolak.", "data": None}
     else:
-        # Fallback if no encoding (shouldn't happen if registered correctly)
-        raise HTTPException(status_code=400, detail="Student has no registered face data")
+        return {"status": "gagal", "message": "Data wajah siswa belum terdaftar", "data": None}
 
-    # 4. Save Image (Evidence)
+    # 5. Simpan Bukti Foto
     file_ext = file.filename.split(".")[-1]
     filename = f"{uuid.uuid4()}.{file_ext}"
     image_dir = "assets/attendance_images"
@@ -58,7 +63,7 @@ async def submit_attendance(
     with open(file_path, "wb") as f:
         f.write(content)
 
-    # 5. Record Attendance
+    # 6. Simpan Data Absensi ke Database
     new_attendance = models.Attendance(
         student_id=student.id,
         date=today,
@@ -70,8 +75,26 @@ async def submit_attendance(
     db.commit()
     db.refresh(new_attendance)
     
-    return new_attendance
+    return {"status": "berhasil", "message": "Absensi berhasil dicatat", "data": new_attendance}
+
+from typing import Optional
 
 @router.get("/", response_model=list[schemas.Attendance])
-def read_attendance(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return db.query(models.Attendance).offset(skip).limit(limit).all()
+def read_attendance(
+    skip: int = 0, 
+    limit: int = 100, 
+    student_id: Optional[int] = None,
+    class_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.Attendance)
+
+    # Filter by Student ID
+    if student_id:
+        query = query.filter(models.Attendance.student_id == student_id)
+    
+    # Filter by Class ID (Join with Student table)
+    if class_id:
+        query = query.join(models.Student).filter(models.Student.class_id == class_id)
+
+    return query.offset(skip).limit(limit).all()

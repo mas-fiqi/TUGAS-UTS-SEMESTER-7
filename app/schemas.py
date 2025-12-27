@@ -41,3 +41,8 @@ class Attendance(AttendanceBase):
     
     class Config:
         from_attributes = True
+
+class AttendanceResponse(BaseModel):
+    status: str
+    message: str
+    data: Optional[Attendance] = None
