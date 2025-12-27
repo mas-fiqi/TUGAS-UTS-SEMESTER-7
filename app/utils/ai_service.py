@@ -10,9 +10,12 @@ except ImportError:
     import numpy as np
     import io
 
-def validate_face(image_bytes: bytes, known_face_encoding_bytes: bytes) -> bool:
+import pickle # ensure pickle is available for loading numpy array if needed or use frombuffer
+
+def validate_face(image_bytes: bytes, known_face_encoding_bytes: bytes) -> tuple[bool, float]:
     """
     Validates if the face in the image matches the known face encoding.
+    Returns: (is_match, confidence_score)
     """
     if HAS_FACE_RECOGNITION:
         try:
@@ -21,24 +24,31 @@ def validate_face(image_bytes: bytes, known_face_encoding_bytes: bytes) -> bool:
             
             if not face_encodings:
                 print("No face found in the uploaded image.")
-                return False
+                return False, 0.0
 
             unknown_face_encoding = face_encodings[0]
             known_face_encoding = np.frombuffer(known_face_encoding_bytes, dtype=np.float64)
 
-            results = face_recognition.compare_faces([known_face_encoding], unknown_face_encoding)
+            # Calculate distance
+            face_distances = face_recognition.face_distance([known_face_encoding], unknown_face_encoding)
+            distance = face_distances[0]
             
-            if not results:
-                return False
-                
-            return results[0]
+            # Calculate score: 1.0 - distance
+            # If distance > 1.0, score is 0.0
+            score = max(0.0, 1.0 - distance)
+            
+            # Strict match check (e.g. distance < 0.6)
+            is_match = distance < 0.6
+            
+            return is_match, float(score)
         except Exception as e:
             print(f"Error in face validation: {e}")
-            return False
+            return False, 0.0
     else:
         # Fallback: Use OpenCV just to detect IF there is a face, 
         # but skip strict comparison (mock validation as True if face exists)
-        return _detect_face_opencv(image_bytes)
+        is_face_detected = _detect_face_opencv(image_bytes)
+        return is_face_detected, 0.9 if is_face_detected else 0.0
 
 def get_face_encoding(image_bytes: bytes) -> bytes:
     """
