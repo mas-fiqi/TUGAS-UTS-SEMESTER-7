@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+sqlalchemy
+python-multipart
+# face_recognition dependencies can be tricky on windows, attempting standard install
+face_recognition
+numpy
+opencv-python
