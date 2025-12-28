@@ -37,7 +37,7 @@ class AttendanceCreate(AttendanceBase):
 class Attendance(AttendanceBase):
     id: int
     date: str
-    timestamp: str
+    timestamp: datetime
     status: str
     
     class Config:
@@ -48,13 +48,18 @@ class AttendanceResponse(BaseModel):
     message: str
     data: Optional[Attendance] = None
 
+from pydantic import BaseModel, Field
+
 class AttendanceSessionBase(BaseModel):
-    class_id: int
+    class_id: int = Field(..., alias="classId")
     date: str
-    start_time: str
-    end_time: str
+    start_time: str = Field(..., alias="startTime")
+    end_time: str = Field(..., alias="endTime")
     method: str = "face"
-    is_active: bool = True
+    is_active: bool = Field(True, alias="isActive")
+
+    class Config:
+        populate_by_name = True
 
 class AttendanceSessionCreate(AttendanceSessionBase):
     pass

@@ -55,8 +55,8 @@ def read_students(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
     return students
 
 @router.post("/classes/", response_model=schemas.Class)
-def create_class(name: str = Form(...), db: Session = Depends(get_db)):
-    db_class = models.Class(name=name)
+def create_class(class_data: schemas.ClassCreate, db: Session = Depends(get_db)):
+    db_class = models.Class(name=class_data.name)
     db.add(db_class)
     db.commit()
     db.refresh(db_class)

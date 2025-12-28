@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app import models, schemas
@@ -12,6 +12,23 @@ def get_db():
         yield db
     finally:
         db.close()
+
+@router.get("/", response_model=List[schemas.Class])
+def read_classes(db: Session = Depends(get_db)):
+    return db.query(models.Class).all()
+
+@router.post("/", response_model=schemas.Class)
+def create_class(class_data: schemas.ClassCreate, db: Session = Depends(get_db)):
+    # Check if class with same name exists
+    existing_class = db.query(models.Class).filter(models.Class.name == class_data.name).first()
+    if existing_class:
+        raise HTTPException(status_code=400, detail="Class with this name already exists")
+    
+    db_class = models.Class(name=class_data.name)
+    db.add(db_class)
+    db.commit()
+    db.refresh(db_class)
+    return db_class
 
 @router.post("/{class_id}/students/{student_id}", response_model=schemas.ClassMember)
 def add_student_to_class(class_id: int, student_id: int, db: Session = Depends(get_db)):

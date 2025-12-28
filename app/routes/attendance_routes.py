@@ -22,6 +22,7 @@ def get_db():
 @router.post("/sessions/", response_model=schemas.AttendanceSession)
 def create_session(session: schemas.AttendanceSessionCreate, db: Session = Depends(get_db)):
     # Create new session
+    # Access fields by attribute name (snake_case) thanks to populate_by_name=True
     new_session = models.AttendanceSession(
         class_id=session.class_id,
         date=session.date,
@@ -36,13 +37,31 @@ def create_session(session: schemas.AttendanceSessionCreate, db: Session = Depen
     return new_session
 
 @router.get("/sessions/", response_model=list[schemas.AttendanceSession])
-def get_sessions(class_id: Optional[int] = None, date: Optional[str] = None, db: Session = Depends(get_db)):
+def get_sessions(
+    class_id: Optional[int] = None, 
+    date: Optional[str] = None, 
+    is_active: Optional[bool] = None,
+    db: Session = Depends(get_db)
+):
     query = db.query(models.AttendanceSession)
     if class_id:
         query = query.filter(models.AttendanceSession.class_id == class_id)
     if date:
         query = query.filter(models.AttendanceSession.date == date)
+    if is_active is not None:
+        query = query.filter(models.AttendanceSession.is_active == is_active)
     return query.all()
+
+@router.delete("/sessions/{session_id}")
+def delete_session(session_id: int, db: Session = Depends(get_db)):
+    session = db.query(models.AttendanceSession).filter(models.AttendanceSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Soft delete: Just set is_active to False
+    session.is_active = False
+    db.commit()
+    return {"status": "success", "message": "Session deactivated"}
 
 @router.post("/", response_model=schemas.AttendanceResponse)
 async def submit_attendance(

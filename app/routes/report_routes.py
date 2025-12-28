@@ -20,15 +20,13 @@ def get_class_report(class_id: int, db: Session = Depends(get_db)):
     if not class_obj:
         raise HTTPException(status_code=404, detail="Class not found")
 
-    # 1. Hitung total sesi yang SUDAH BERLALU (Expired)
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    # Query logic: date < today OR (date == today AND end_time < current_time)
-    # Simplification for string comparison: filtering active sessions or just all sessions?
-    # Report usually implies ALL scheduled sessions that have passed.
+    today = datetime.now()
     
-    # Let's count all sessions created for this class
+    # Count sessions that are active AND have passed (or all active sessions? usually all active)
+    # Filter by is_active=True to exclude deleted sessions
     total_sessions_count = db.query(models.AttendanceSession).filter(
-        models.AttendanceSession.class_id == class_id
+        models.AttendanceSession.class_id == class_id,
+        models.AttendanceSession.is_active == True
     ).count()
 
     # Get all students in the class via ClassMember (or direct foreign key for simplicity if legacy)
@@ -69,9 +67,17 @@ def get_class_report(class_id: int, db: Session = Depends(get_db)):
         students=student_reports
     )
 
-@router.get("/student/{student_id}", response_model=schemas.StudentReport)
-def get_student_report(student_id: int, db: Session = Depends(get_db)):
-    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+@router.get("/student/{student_identifier}", response_model=schemas.StudentReport)
+def get_student_report(student_identifier: str, db: Session = Depends(get_db)):
+    # Try finding by ID first if it looks like an integer and is small enough to be a reasonable ID
+    student = None
+    if student_identifier.isdigit() and len(student_identifier) < 10:
+         student = db.query(models.Student).filter(models.Student.id == int(student_identifier)).first()
+    
+    # If not found or looks like a NIM (long digit string), try finding by NIM
+    if not student:
+        student = db.query(models.Student).filter(models.Student.nim == student_identifier).first()
+
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
@@ -84,11 +90,12 @@ def get_student_report(student_id: int, db: Session = Depends(get_db)):
     total_sessions_count = 0
     if current_class_id:
         total_sessions_count = db.query(models.AttendanceSession).filter(
-            models.AttendanceSession.class_id == current_class_id
+            models.AttendanceSession.class_id == current_class_id,
+            models.AttendanceSession.is_active == True
         ).count()
 
     total_present = db.query(models.Attendance).filter(
-        models.Attendance.student_id == student_id,
+        models.Attendance.student_id == student.id,
         models.Attendance.status == "Hadir"
     ).count()
 
